@@ -9,7 +9,7 @@ CONFIG = {
     "DEFAULT_PROXY": "http://127.0.0.1:10086",
     "CONTINUE_WITHOUT_FEISHU": True,  # 无Webhook继续爬取
     "FEISHU_WEBHOOK_URL": "",  # 飞书机器人Webhook地址(通过环境变量或Secrets设置)
-    "BARK_KEY": os.getenv("BARK_KEY", ""),  # Bark推送Key(从环境变量读取)
+    "BARK_KEY":"",  # Bark推送Key(从环境变量读取)
     "USE_BARK_PUSH": False,  # 布尔开关，True启用Bark推送，False使用飞书推送
 }
 
