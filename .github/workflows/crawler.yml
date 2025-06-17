@@ -37,6 +37,7 @@ jobs:
     - name: Run crawler
       env:
         FEISHU_WEBHOOK_URL: ${{ secrets.FEISHU_WEBHOOK_URL }}
+        Bark_Key: ${{ secrets.Bark_Key }}
         GITHUB_ACTIONS: true
       run: python main.py
     
