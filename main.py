@@ -1,16 +1,17 @@
 # coding=utf-8
 
-import json
-import time
-import random
-from datetime import datetime
-import webbrowser
-from typing import Dict, List, Tuple, Optional, Union
-from pathlib import Path
-import os
+import json  # 处理json数据
+import time  # 时间相关功能
+import random  # 随机数生成
+from datetime import datetime  # 日期时间处理
+import webbrowser  # 打开网页
+from typing import Dict, List, Tuple, Optional, Union  # 类型提示
+from pathlib import Path  # 路径处理
+import os  # 操作系统接口
 
-import requests
-import pytz
+import requests  # HTTP请求
+import pytz  # 时区处理
+
 
 CONFIG = {
     "FEISHU_SEPARATOR": "━━━━━━━━━━━━━━━━━━━",  # 飞书消息分割线，注意，其它类型的分割线可能会被飞书过滤而不显示
@@ -18,9 +19,16 @@ CONFIG = {
     "FEISHU_REPORT_TYPE": "daily",  # 飞书报告类型: "current"|"daily"|"both"
     "RANK_THRESHOLD": 5,  # 排名高亮阈值
     "USE_PROXY": True,  # 是否启用代理
-    "DEFAULT_PROXY": "http://127.0.0.1:10086",
-    "CONTINUE_WITHOUT_FEISHU": True,  # 控制在没有飞书 webhook URL 时是否继续执行爬虫, 如果 True ,会依然进行爬虫行为，并在 github 上持续的生成爬取的新闻数据
-    "FEISHU_WEBHOOK_URL": "",  # 飞书机器人的 webhook URL，大概长这样：https://www.feishu.cn/flow/api/trigger-webhook/xxxx， 默认为空，推荐通过GitHub Secrets设置
+    "DEFAULT_PROXY": "http://127.0.0.1:10086",  # 代理地址备用
+    "CONTINUE_WITHOUT_FEISHU": True,  # 在无飞书Webhook时，是否继续爬虫
+    "FEISHU_WEBHOOK_URL": "",  # 飞书机器人的 webhook URL，推荐通过环境变量或GitHub Secrets设置
+
+    # 新增推送控制相关配置
+    "FEISHU_ENABLE": True,  # 飞书推送开关，True启用，False关闭
+    "BARK_ENABLE": True,    # Bark推送开关，True启用，False关闭
+    "BARK_SERVER_URL": "https://api.day.app",  # Bark服务器地址
+    "BARK_DEVICE_KEY": os.getenv("Bark_Key", ""),  # Bark设备Key，从环境变量读取
+    "CONTINUE_CRAWL_IF_PUSH_ALL_OFF": True,  # 两个推送均关闭时是否继续爬虫，True执行，False退出
 }
 
 
@@ -29,15 +37,15 @@ class TimeHelper:
 
     @staticmethod
     def get_beijing_time() -> datetime:
-        return datetime.now(pytz.timezone("Asia/Shanghai"))
+        return datetime.now(pytz.timezone("Asia/Shanghai"))  # 获取当前北京时间
 
     @staticmethod
     def format_date_folder() -> str:
-        return TimeHelper.get_beijing_time().strftime("%Y年%m月%d日")
+        return TimeHelper.get_beijing_time().strftime("%Y年%m月%d日")  # 格式化当前日期，用于文件夹名
 
     @staticmethod
     def format_time_filename() -> str:
-        return TimeHelper.get_beijing_time().strftime("%H时%M分")
+        return TimeHelper.get_beijing_time().strftime("%H时%M分")  # 格式化时间，用于文件名
 
 
 class FileHelper:
@@ -45,21 +53,21 @@ class FileHelper:
 
     @staticmethod
     def ensure_directory_exists(directory: str) -> None:
-        Path(directory).mkdir(parents=True, exist_ok=True)
+        Path(directory).mkdir(parents=True, exist_ok=True)  # 确保目录存在，不存在则创建多层目录
 
     @staticmethod
     def get_output_path(subfolder: str, filename: str) -> str:
-        date_folder = TimeHelper.format_date_folder()
-        output_dir = Path("output") / date_folder / subfolder
-        FileHelper.ensure_directory_exists(str(output_dir))
-        return str(output_dir / filename)
+        date_folder = TimeHelper.format_date_folder()  # 获取日期文件夹名
+        output_dir = Path("output") / date_folder / subfolder  # 构造完整目录
+        FileHelper.ensure_directory_exists(str(output_dir))  # 确保目录存在
+        return str(output_dir / filename)  # 返回完整文件路径
 
 
 class DataFetcher:
     """数据获取器"""
 
     def __init__(self, proxy_url: Optional[str] = None):
-        self.proxy_url = proxy_url
+        self.proxy_url = proxy_url  # 代理地址，None表示不使用代理
 
     def fetch_data(
         self,
@@ -79,10 +87,13 @@ class DataFetcher:
 
         proxies = None
         if self.proxy_url:
-            proxies = {"http": self.proxy_url, "https": self.proxy_url}
+            proxies = {"http": self.proxy_url, "https": self.proxy_url}  # 设置http/https代理
 
         headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+            ),
             "Accept": "application/json, text/plain, */*",
             "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
             "Connection": "keep-alive",
@@ -92,13 +103,11 @@ class DataFetcher:
         retries = 0
         while retries <= max_retries:
             try:
-                response = requests.get(
-                    url, proxies=proxies, headers=headers, timeout=10
-                )
-                response.raise_for_status()
+                response = requests.get(url, proxies=proxies, headers=headers, timeout=10)  # 发送请求
+                response.raise_for_status()  # 非200抛异常
 
                 data_text = response.text
-                data_json = json.loads(data_text)
+                data_json = json.loads(data_text)  # 解析json
 
                 status = data_json.get("status", "未知")
                 if status not in ["success", "cache"]:
@@ -1318,6 +1327,65 @@ class ReportGenerator:
             return False
 
 
+# 新增Bark推送函数
+def send_to_bark(title: str, body: str, subtitle: str = "") -> bool:
+    """向Bark服务推送消息，支持标题、副标题和正文"""
+    if not CONFIG.get("BARK_ENABLE", False):
+        print("Bark推送开关关闭，跳过发送。")
+        return False
+
+    device_key = CONFIG.get("BARK_DEVICE_KEY", "")
+    server_url = CONFIG.get("BARK_SERVER_URL", "https://api.day.app")
+
+    if not device_key:
+        print("Bark设备Key未配置，跳过发送。")
+        return False
+
+    url = f"{server_url}/push"
+    headers = {"Content-Type": "application/json; charset=utf-8"}
+    payload = {
+        "device_key": device_key,
+        "title": title,
+        "subtitle": subtitle,
+        "body": body,
+        "sound": "minuet",
+        "group": "TrendRadar",
+    }
+
+    try:
+        response = requests.post(url, headers=headers, data=json.dumps(payload), timeout=10)
+        response.raise_for_status()
+        print("Bark推送成功")
+        return True
+    except Exception as e:
+        print(f"Bark推送失败: {e}")
+        return False
+
+
+# 统一推送函数
+def send_reports(report_text: str):
+    """统一推送报告，执行飞书和Bark推送，均遵守开关"""
+    # 飞书推送
+    try:
+        if CONFIG.get("FEISHU_ENABLE", False):
+            webhook_url = os.getenv("FEISHU_WEBHOOK_URL", CONFIG.get("FEISHU_WEBHOOK_URL", ""))
+            if webhook_url:
+                headers = {"Content-Type": "application/json; charset=utf-8"}
+                data = {"msg_type": "text", "content": {"text": report_text}}
+                r = requests.post(webhook_url, headers=headers, data=json.dumps(data), timeout=10)
+                r.raise_for_status()
+                print("飞书推送成功")
+            else:
+                print("飞书Webhook未配置或无效，跳过飞书推送")
+        else:
+            print("飞书推送开关关闭，跳过飞书推送")
+    except Exception as e:
+        print(f"飞书推送异常: {e}")
+
+    # Bark推送
+    send_to_bark("TrendRadar 日报", report_text)
+
+
 class NewsAnalyzer:
     """新闻分析器"""
 
@@ -1394,6 +1462,17 @@ class NewsAnalyzer:
         now = TimeHelper.get_beijing_time()
         print(f"当前北京时间: {now.strftime('%Y-%m-%d %H:%M:%S')}")
 
+        feishu_on = CONFIG.get("FEISHU_ENABLE", False)
+        bark_on = CONFIG.get("BARK_ENABLE", False)
+        continue_crawl = CONFIG.get("CONTINUE_CRAWL_IF_PUSH_ALL_OFF", True)
+
+        if not feishu_on and not bark_on:
+            if continue_crawl:
+                print("飞书和Bark推送均关闭，且配置允许继续爬虫，程序继续执行核心业务。")
+            else:
+                print("飞书和Bark推送均关闭，且配置不允许继续爬虫，程序退出。")
+                return  # 直接返回终止后续执行
+
         webhook_url = os.environ.get("FEISHU_WEBHOOK_URL", CONFIG["FEISHU_WEBHOOK_URL"])
         if not webhook_url and not CONFIG["CONTINUE_WITHOUT_FEISHU"]:
             print(
@@ -1403,8 +1482,6 @@ class NewsAnalyzer:
 
         if not webhook_url:
             print("FEISHU_WEBHOOK_URL未设置，将继续执行爬虫但不发送飞书通知")
-
-        print(f"飞书报告类型: {self.feishu_report_type}")
 
         ids = [
             ("toutiao", "今日头条"),
@@ -1472,6 +1549,10 @@ class NewsAnalyzer:
             stats, total_titles, failed_ids, False, new_titles, id_to_alias
         )
         print(f"HTML报告已生成: {html_file}")
+
+        # 统一调用推送，发送简要文本报告
+        report_text = f"今日爬取完成，统计报告生成，标题总数: {total_titles}"
+        send_reports(report_text)
 
         daily_html = self.generate_daily_summary()
 
