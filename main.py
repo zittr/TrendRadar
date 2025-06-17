@@ -26,7 +26,7 @@ CONFIG = {
     # 新增推送控制相关配置
     "FEISHU_ENABLE": True,  # 飞书推送开关，True启用，False关闭
     "BARK_ENABLE": True,    # Bark推送开关，True启用，False关闭
-    "BARK_SERVER_URL": "https://api.day.app",  # Bark服务器地址
+    "BARK_SERVER_URL": "https://api.day.app/",  # Bark服务器地址
     "BARK_DEVICE_KEY": os.getenv("Bark_Key", ""),  # Bark设备Key，从环境变量读取
     "CONTINUE_CRAWL_IF_PUSH_ALL_OFF": True,  # 两个推送均关闭时是否继续爬虫，True执行，False退出
 }
